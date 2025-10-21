@@ -1,0 +1,64 @@
+@startuml
+title Контейнерная диаграмма: Детализация ключевых систем
+
+!include <C4/C4_Context>
+!include <C4/C4_Container>
+
+Person(client, "Клиент")
+
+System_Boundary(bank, "Банк «Стандарт»") {
+
+  Container(site_frontend, "Сайт (фронтенд)", "React.js", "Форма заявки на депозит")
+  Container(site_backend, "Сайт (бэкенд)", "PHP", "Проксирует запросы в Deposits Gateway")
+
+  Container(ib_web, "Интернет-банк (веб)", "ASP.NET MVC", "UI для подачи заявки")
+  Container(ib_core, "Интернет-банк (ядро)", ".NET Framework", "Платёжный функционал, СМС-модуль")
+
+  Container(deposits_gateway_api, "Deposits Gateway API", "Java Spring Boot", "REST API для приёма заявок")
+  Container(deposits_db, "Deposits DB", "MS SQL Server", "Хранение заявок и ставок")
+
+  Container(kafka, "Kafka", "Apache Kafka", "Асинхронная маршрутизация событий")
+
+  Container(call_center_app, "Кол-центр (веб-приложение)", "React.js + Spring Boot", "Отображение заявок")
+  Container(call_center_db, "Кол-центр (БД)", "PostgreSQL", "Хранение обращений")
+
+  Container(ABS_client, "АБС (Delphi-клиент)", "Delphi", "Интерфейс для сотрудников")
+  Container(ABS_db, "АБС (БД)", "Oracle", "PL/SQL-логика, учёт счетов")
+
+  Container(sms_adapter, "СМС-адаптер", "C# / Java", "Интеграция АБС с телеком-оператором")
+}
+
+client --> site_frontend
+client --> ib_web
+
+site_frontend --> site_backend : AJAX
+site_backend --> deposits_gateway_api : HTTPS
+
+ib_web --> ib_core : Внутренние вызовы
+ib_core --> deposits_gateway_api : HTTPS (новая интеграция)
+
+deposits_gateway_api --> deposits_db : JDBC
+deposits_gateway_api --> kafka : Публикация события
+
+kafka --> call_center_app : Консьюмер
+call_center_app --> call_center_db
+
+kafka --> ABS_client : (Будущее) Batch-загрузка
+ABS_client --> ABS_db
+
+ABS_db --> sms_adapter
+sms_adapter --> telecom : HTTPS/SOAP
+
+note right of deposits_gateway_api
+  Новый сервис.
+  Поддерживает TLS, валидацию,
+  шифрование данных.
+end note
+
+note left of ABS_db
+  Прямой доступ извне ЗАПРЕЩЁН.
+  Интеграция — только через
+  batch-процессы или адаптеры.
+end note
+
+@enduml

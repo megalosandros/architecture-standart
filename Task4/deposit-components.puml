@@ -1,0 +1,19 @@
+@startuml
+title Компоненты Deposits Gateway (расширение)
+
+package "Deposits Gateway" {
+  [Admin Web UI] --> [Rate Management Service]
+  [Rate Management Service] --> (MS SQL: deposit_products)
+  
+  [Rate Distribution Service] --> (MS SQL: deposit_products)
+  [Rate Distribution Service] --> [Call Center API Client]
+  [Rate Distribution Service] --> [SFTP File Publisher]
+}
+
+[Call Center API Client] --> (Система кол-центра\nREST API)
+[SFTP File Publisher] --> (SFTP-сервер партнёра)
+
+note right of [Rate Distribution Service]
+  Запускается по расписанию\n(Cron / Kubernetes Job)
+end note
+@enduml

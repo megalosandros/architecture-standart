@@ -1,0 +1,99 @@
+@startuml
+title Диаграмма контейнеров: Система открытия депозитов + Кол-центры
+
+!include <C4/C4_Context>
+!include <C4/C4_Container>
+
+Person(client_new, "Новый клиент", "Подает заявку через сайт")
+Person(client_existing, "Существующий клиент", "Подает заявку через интернет-банк")
+Person(deposit_admin, "Администратор депозитов", "Управляет ставками")
+Person(call_center_agent, "Оператор кол-центра банка")
+Person(partner_agent, "Оператор партнёрского кол-центра")
+
+System_Boundary(bank_boundary, "Инфраструктура банка «Стандарт»") {
+
+  ' === Сайт ===
+  Container(site_frontend, "Сайт (фронтенд)", "React.js", "Форма заявки, список депозитов")
+  Container(site_backend, "Сайт (бэкенд)", "PHP", "Прокси к Deposits Gateway")
+
+  ' === Интернет-банк ===
+  Container(ib_web, "Интернет-банк (веб)", "ASP.NET MVC", "UI подачи заявки")
+  Container(ib_core, "Интернет-банк (ядро)", ".NET Framework 4.5", "СМС-подтверждение, интеграция")
+
+  ' === Deposits Gateway (новый сервис) ===
+  Container(dg_api, "Deposits Gateway API", "Java Spring Boot", "REST API для заявок и ставок")
+  Container(dg_admin_ui, "Admin UI ставок", "React + Spring Boot", "Управление продуктами")
+  Container(dg_db, "Deposits DB", "MS SQL Server", "Заявки, ставки, история")
+  Container(dg_scheduler, "Rate Distribution Job", "Spring Boot", "Ежедневная выгрузка ставок")
+
+  ' === Кол-центр банка ===
+  Container(cc_web, "Кол-центр (веб-интерфейс)", "React.js", "CRM + ставки по депозитам")
+  Container(cc_backend, "Кол-центр (бэкенд)", "Java Spring Boot", "Приём заявок, обновление ставок")
+  Container(cc_db, "Кол-центр (БД)", "PostgreSQL", "Обращения, кэш ставок")
+
+  ' === Инфраструктура ===
+  Container(kafka, "Kafka", "Apache Kafka", "Шина событий")
+  Container(sftp_client, "SFTP Client", "Java (JSch)", "Отправка файлов партнёру")
+}
+
+' === Внешние системы ===
+System_Ext(sftp_partner, "SFTP-сервер партнёра", "SFTP", "Приём файла ставок")
+System_Ext(partner_cc, "Партнёрский кол-центр", "Внешняя CRM", "Ручная загрузка CSV")
+System_Ext(telecom, "Телеком-оператор", "SMPP/HTTPS", "Доставка СМС")
+
+' === Потоки данных ===
+
+' Клиенты → Банк
+client_new --> site_frontend
+client_existing --> ib_web
+
+' Сайт → Deposits Gateway
+site_frontend --> site_backend : HTTPS
+site_backend --> dg_api : HTTPS
+
+' Интернет-банк → Deposits Gateway
+ib_web --> ib_core : внутр. вызовы
+ib_core --> dg_api : HTTPS
+
+' Админ → Deposits Gateway
+deposit_admin --> dg_admin_ui : HTTPS
+dg_admin_ui --> dg_api : REST
+dg_api --> dg_db : JDBC
+
+' Распространение ставок
+dg_scheduler --> dg_db : читает ставки
+dg_scheduler --> cc_backend : HTTPS (PUT /rates)
+dg_scheduler --> sftp_client : генерирует CSV
+sftp_client --> sftp_partner : SFTP (SSH-ключ)
+
+' Заявки → Кол-центр
+dg_api --> dg_db : сохраняет заявку
+dg_api --> kafka : событие "новая заявка"
+kafka --> cc_backend : консьюмер
+
+' Кол-центр → Операторы
+cc_backend --> cc_db
+cc_web --> cc_backend : REST
+call_center_agent --> cc_web
+
+' Партнёр
+sftp_partner --> partner_agent : уведомление о новом файле
+partner_agent --> partner_cc : загружает CSV
+
+' СМС
+ib_core --> telecom : СМС-код
+telecom --> client_existing
+' (АБС → telecom — не на MVP, опущено)
+
+note right of dg_db
+  Единый источник:
+  - Заявки на депозиты
+  - Ставки по продуктам
+end note
+
+note left of sftp_client
+  Формат файла:
+  deposit_name, term_days, rate, valid_from
+end note
+
+@enduml

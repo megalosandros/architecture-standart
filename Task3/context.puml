@@ -1,0 +1,51 @@
+@startuml
+title Системный контекст: Открытие депозитов (MVP)
+
+!include <C4/C4_Context>
+!include <C4/C4_Container>
+
+LAYOUT_TOP_DOWN()
+
+Person(client_new, "Новый клиент", "Подает заявку через сайт")
+Person(client_existing, "Существующий клиент", "Подает заявку через интернет-банк")
+Person(call_center_agent, "Оператор кол-центра", "Обрабатывает заявку")
+Person(back_office, "Сотрудник бэк-офиса", "Подтверждает депозит в АБС")
+
+System_Boundary(bank, "Банк «Стандарт»") {
+  System(site, "Сайт", "Маркетинг + форма заявки")
+  System(internet_bank, "Интернет-банк", "Управление счетами, подача заявки")
+  System(deposits_gateway, "Deposits Gateway", "Прием и маршрутизация заявок")
+  System(call_center_system, "Система кол-центра", "CRM-интерфейс для операторов")
+  System(ABS, "АБС", "Ядро банка: учёт, договоры")
+  System(sms_gateway, "СМС-шлюз", "Отправка уведомлений")
+}
+
+System_Ext(kafka, "Kafka", "Шина сообщений (внешняя по отношению к границе)")
+System_Ext(telecom, "Телеком-оператор", "Доставка СМС")
+
+client_new --> site
+client_existing --> internet_bank
+
+site --> deposits_gateway : HTTPS
+internet_bank --> deposits_gateway : HTTPS
+
+deposits_gateway --> kafka : Публикует событие
+
+kafka --> call_center_system : Консьюмер: заявка
+kafka --> ABS : (Будущее) Консьюмер: batch-заявка
+
+call_center_system --> call_center_agent
+ABS --> back_office
+
+ABS --> sms_gateway : Запрос СМС
+sms_gateway --> telecom
+telecom --> client_new
+telecom --> client_existing
+
+note right of deposits_gateway
+  Новый компонент MVP.
+  Хранит заявки в MS SQL.
+  Управляет ставками (таблица).
+end note
+
+@enduml
