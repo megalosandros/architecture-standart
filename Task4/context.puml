@@ -1,0 +1,30 @@
+@startuml
+title Контекст: Распространение ставок по депозитам
+
+!include <C4/C4_Context>
+!include <C4/C4_Container>
+
+Person(deposit_admin, "Администратор депозитов")
+Person(call_center_agent, "Оператор кол-центра банка")
+Person(partner_agent, "Оператор партнёрского кол-центра")
+
+System_Boundary(bank, "Банк «Стандарт»") {
+  System(deposits_gateway, "Deposits Gateway", "Единый источник ставок")
+  System(call_center_system, "Система кол-центра", "Внутренняя CRM")
+}
+
+System_Ext(partner_call_center, "Партнёрский кол-центр", "Внешняя система")
+System_Ext(sftp_server, "SFTP-сервер партнёра", "Доступ по ключу")
+
+deposit_admin --> deposits_gateway : Обновляет ставки
+deposits_gateway --> call_center_system : API: актуальные ставки
+deposits_gateway --> sftp_server : SFTP: файл ставок
+sftp_server --> partner_call_center : Загрузка файла
+
+note right of deposits_gateway
+  Включает:
+  - Admin UI
+  - Rate Distribution Service
+end note
+
+@enduml
