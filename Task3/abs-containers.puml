@@ -1,1 +1,64 @@
+@startuml
+title Контейнерная диаграмма: АБС банка «Стандарт»
 
+!include <C4/C4_Context>
+!include <C4/C4_Container>
+
+
+Person(front_office_staff, "Сотрудник отделения\n(фронт-офис)", "Работает с клиентами, открывает депозиты")
+Person(deposit_back_office, "Сотрудник депозитного\nбэк-офиса", "Рассчитывает ставки, создаёт депозиты в АБС")
+Person(credit_back_office, "Сотрудник кредитного\nбэк-офиса", "Предоставляет данные по кредитному риску")
+
+System_Boundary(ABS_boundary, "Автоматизированная Банковская Система (АБС)") {
+
+  Container(ABS_desktop_client, "АБС (десктоп-клиент)", "Delphi", "Тонкий клиент для сотрудников. Интерфейс для операций с депозитами, кредитами, договорами.")
+  Container(ABS_oracle_db, "АБС (База данных)", "Oracle Database", "Хранение всех банковских данных: счета, операции, договоры, настройки.")
+  Container(ABS_plsql_engine, "АБС (PL/SQL-логика)", "Oracle PL/SQL", "Бизнес-логика: расчёт балансов, проводки, валидация операций.")
+
+  ' Внутренние интеграции
+  ABS_desktop_client --> ABS_oracle_db : JDBC / Oracle Net
+  ABS_plsql_engine --> ABS_oracle_db : Хранимые процедуры, триггеры
+}
+
+' Внешние системы и интеграции
+System_Boundary(other_systems, "Другие системы банка") {
+  Container(email_system, "Корпоративная почта", "Microsoft Exchange / аналог", "Обмен Excel-файлами и согласования по email")
+  Container(excel_files, "Excel-файлы ставок", "Microsoft Excel", "Вне системы! Источник ставок по депозитам.")
+  Container(sms_adapter, "СМС-адаптер", "C# / Java", "Интеграция с телеком-оператором")
+}
+
+System_Ext(telecom, "Телеком-оператор", "Внешний СМС-провайдер")
+
+' Акторы → АБС
+front_office_staff --> ABS_desktop_client
+deposit_back_office --> ABS_desktop_client
+credit_back_office --> ABS_desktop_client
+
+' Внутрипроцессные взаимодействия (вне АБС)
+deposit_back_office --> excel_files : Ручной расчёт ставок
+deposit_back_office --> email_system : Запрос данных в кредитный отдел
+credit_back_office --> email_system : Ответ с данными по клиенту
+excel_files --> deposit_back_office : Импорт ставок
+
+' АБС → внешние системы
+ABS_oracle_db --> sms_adapter : Триггер / пакетная отправка\nзапроса на СМС
+sms_adapter --> telecom : HTTPS / SMPP
+
+
+note right of ABS_oracle_db
+  Единая точка хранения:
+  - Счета клиентов
+  - Депозитные договоры
+  - Операции
+  - Справочники
+  
+  Прямой доступ извне\n(например, из интернет-банка)\nЗАПРЕЩЁН на MVP.
+end note
+
+note left of excel_files
+  Критическая уязвимость:
+  Логика ставок — вне АБС.
+  Источник ошибок и задержек.
+end note
+
+@enduml
